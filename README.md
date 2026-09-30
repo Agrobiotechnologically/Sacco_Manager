@@ -1,4 +1,4 @@
-# Sacco_Manager
-Manage and Save together
 
-Find me at @tokxmini@gmail.com
+
+## Live website
+https://agrobiotechnologically.github.io/Sacco_Manager/
