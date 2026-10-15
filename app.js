@@ -1,5 +1,7 @@
 const STORAGE_KEY = "umoja-sacco-data-v1";
 const PREFERENCES_KEY = "umoja-sacco-preferences-v1";
+// Change this value to update the administrator name throughout the app.
+const administratorName = "Josh";
 const today = new Date();
 const isoDate = (date = today) => {
   const offset = date.getTimezoneOffset();
@@ -93,9 +95,13 @@ try {
   console.error("Unable to load SACCO preferences.", error);
 }
 document.documentElement.dataset.theme = preferences.theme === "dark" ? "dark" : "light";
+document.querySelector("#administrator-name").textContent = administratorName;
+document.querySelector("#administrator-avatar").textContent = administratorName.trim().charAt(0).toUpperCase() || "A";
 const pageContent = document.querySelector("#page-content");
 const appDialog = document.querySelector("#app-dialog");
+const importFileInput = document.querySelector("#data-import-file");
 const navItems = [...document.querySelectorAll(".nav-link")];
+let importKind = "";
 
 const money = (amount) => new Intl.NumberFormat("en-UG", {
   style: "currency", currency: "UGX", currencyDisplay: "code", maximumFractionDigits: 0,
@@ -195,7 +201,7 @@ function renderDashboard() {
   const pending = pendingLoans().length;
   const dateHeading = new Intl.DateTimeFormat("en-UG", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(today).toUpperCase();
   pageContent.innerHTML = `
-    ${pageHeading(dateHeading, "Good morning, Josh ", "Your SACCO at a glance. Sample data is saved in this browser.", `<button class="button" type="button" data-action="export-transactions">${icon("download")}Export</button>${primaryButton("New transaction", "new-transaction")}`)}
+    ${pageHeading(dateHeading, `Good morning, ${escapeHtml(administratorName)} `, "Your SACCO at a glance. Sample data is saved in this browser.", `${importButton("transactions")}<button class="button" type="button" data-action="export-transactions">${icon("download")}Export</button>${primaryButton("New transaction", "new-transaction")}`)}
     <div class="stats-grid">
       ${metricCard("Total members", number(data.members.length), "users", "Registered", "", "member accounts", "members")}
       ${metricCard("Member savings", money(totalSavings()), "wallet", "Current", "", "member balances", "savings")}
@@ -230,7 +236,7 @@ function renderMembers() {
   pageContent.innerHTML = `
     ${pageHeading("MEMBER RELATIONSHIPS", "Members", "Manage your membership, member records and account status.", primaryButton("Add member", "add-member"))}
     <div class="metric-strip"><div class="metric-item"><span>Total members</span><strong>${number(data.members.length)}</strong></div><div class="metric-item"><span>Active members</span><strong>${number(active)}</strong></div><div class="metric-item"><span>Inactive members</span><strong>${number(data.members.length - active)}</strong></div></div>
-    <section class="panel section-panel"><div class="toolbar"><span class="stat-label">${number(filtered.length)} members</span><span class="toolbar-spacer"></span><select class="filter-select" id="member-status-filter" aria-label="Filter members by status"><option>All status</option><option${memberStatusFilter === "Active" ? " selected" : ""}>Active</option><option${memberStatusFilter === "Inactive" ? " selected" : ""}>Inactive</option></select><button class="button button-small" data-action="export-members">${icon("download")}Export CSV</button></div>
+    <section class="panel section-panel"><div class="toolbar"><span class="stat-label">${number(filtered.length)} members</span><span class="toolbar-spacer"></span><select class="filter-select" id="member-status-filter" aria-label="Filter members by status"><option>All status</option><option${memberStatusFilter === "Active" ? " selected" : ""}>Active</option><option${memberStatusFilter === "Inactive" ? " selected" : ""}>Inactive</option></select>${importButton("members", true)}<button class="button button-small" data-action="export-members">${icon("download")}Export CSV</button></div>
       <div class="table-wrap"><table><thead><tr><th>Member</th><th>Phone / email</th><th>Joined</th><th>Savings</th><th>Shares</th><th>Status</th><th>Action</th></tr></thead><tbody>${filtered.map((member, i) => `<tr><td>${memberPersonCell(member, i)}</td><td>${escapeHtml(member.phone)}<br><small class="muted">${escapeHtml(member.email)}</small></td><td>${dateLabel(member.joinDate)}</td><td>${money(member.savings)}</td><td>${money(member.shares)}</td><td><span class="status status-${member.status.toLowerCase()}">${member.status}</span></td><td><button class="table-action" data-action="view-member" data-id="${escapeHtml(member.id)}">View details</button></td></tr>`).join("") || `<tr><td colspan="7"><div class="empty-state"><strong>No members found</strong>Try another search or adjust the status filter.</div></td></tr>`}</tbody></table></div>
       <div class="table-footer"><span>Showing ${filtered.length} of ${data.members.length} members</span><span>All member records</span></div></section>`;
 }
@@ -242,7 +248,7 @@ function renderSavings() {
   const deposits = data.transactions.filter((transaction) => transaction.type === "Savings deposit").reduce((sum, transaction) => sum + transaction.amount, 0);
   const withdrawals = data.transactions.filter((transaction) => transaction.type === "Savings withdrawal").reduce((sum, transaction) => sum + transaction.amount, 0);
   pageContent.innerHTML = `
-    ${pageHeading("MEMBER DEPOSITS & WITHDRAWALS", "Savings", "Track deposits, withdrawals and member savings balances.", `<button class="button" data-action="export-savings">${icon("download")}Export</button>${primaryButton("Record transaction", "new-transaction")}`)}
+    ${pageHeading("MEMBER DEPOSITS & WITHDRAWALS", "Savings", "Track deposits, withdrawals and member savings balances.", `${importButton("savings")}<button class="button" data-action="export-savings">${icon("download")}Export</button>${primaryButton("Record transaction", "new-transaction")}`)}
     <div class="metric-strip"><div class="metric-item"><span>Total member savings</span><strong>${money(totalSavings())}</strong></div><div class="metric-item"><span>Recorded deposits</span><strong>${money(deposits)}</strong></div><div class="metric-item"><span>Recorded withdrawals</span><strong>${money(withdrawals)}</strong></div></div>
     <section class="panel section-panel"><div class="toolbar"><span class="stat-label">${number(transactions.length)} savings transactions</span><span class="toolbar-spacer"></span></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>Type</th><th>Amount</th><th>Payment method</th><th>Reference</th><th>Date</th></tr></thead><tbody>${transactions.map((item, i) => { const m = memberFor(item.memberId); const positive = item.type === "Savings deposit"; return `<tr><td>${memberPersonCell(m || { name: "Unknown member", id: item.memberId }, i)}</td><td>${escapeHtml(item.type)}</td><td class="${positive ? "amount-positive" : "amount-negative"}">${positive ? "+" : "−"}${money(item.amount)}</td><td>${escapeHtml(item.method)}</td><td>${escapeHtml(item.reference)}</td><td>${dateLabel(item.date)}</td></tr>`; }).join("") || `<tr><td colspan="6"><div class="empty-state"><strong>No savings activity found</strong>Record a deposit or withdrawal to get started.</div></td></tr>`}</tbody></table></div><div class="table-footer"><span>Showing ${transactions.length} savings transactions</span><span>Balances are updated when transactions are recorded</span></div></section>`;
 }
@@ -252,7 +258,7 @@ function renderShares() {
     .filter((transaction) => `${memberName(transaction.memberId)} ${transaction.id} ${transaction.method}`.toLowerCase().includes(searchTerm))
     .sort((a, b) => b.date.localeCompare(a.date));
   pageContent.innerHTML = `
-    ${pageHeading("MEMBER EQUITY", "Share capital", "Track member share contributions and ownership capital.", `<button class="button" data-action="export-shares">${icon("download")}Export</button>${primaryButton("Record contribution", "new-share")}`)}
+    ${pageHeading("MEMBER EQUITY", "Share capital", "Track member share contributions and ownership capital.", `${importButton("shares")}<button class="button" data-action="export-shares">${icon("download")}Export</button>${primaryButton("Record contribution", "new-share")}`)}
     <div class="metric-strip"><div class="metric-item"><span>Total share capital</span><strong>${money(totalShares())}</strong></div><div class="metric-item"><span>Members with shares</span><strong>${data.members.filter((member) => member.shares > 0).length}</strong></div><div class="metric-item"><span>Minimum shareholding</span><strong>${money(15000)}</strong></div></div>
     <section class="panel section-panel"><div class="toolbar"><span class="stat-label">${number(contributions.length)} recorded contributions</span><span class="toolbar-spacer"></span></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>Current shares</th><th>Contribution amount</th><th>Payment method</th><th>Reference</th><th>Date</th></tr></thead><tbody>${contributions.map((item, i) => { const member = memberFor(item.memberId); return `<tr><td>${memberPersonCell(member || { name: "Unknown member", id: item.memberId }, i)}</td><td>${money(member?.shares || 0)}</td><td class="amount-positive">+${money(item.amount)}</td><td>${escapeHtml(item.method)}</td><td>${escapeHtml(item.reference)}</td><td>${dateLabel(item.date)}</td></tr>`; }).join("") || `<tr><td colspan="6"><div class="empty-state"><strong>No share contributions found</strong>Record a contribution to get started.</div></td></tr>`}</tbody></table></div><div class="table-footer"><span>Showing ${contributions.length} contributions</span><span>Share capital is member equity</span></div></section>`;
 }
@@ -262,7 +268,7 @@ function renderLoans() {
     .filter((loan) => loanStatusFilter === "All status" || loan.status === loanStatusFilter);
   const portfolio = loanPortfolio();
   pageContent.innerHTML = `
-    ${pageHeading("CREDIT & LENDING", "Loans", "Review applications, manage disbursements and monitor outstanding balances.", `<button class="button" data-action="export-loans">${icon("download")}Export</button>${primaryButton("New application", "new-loan")}`)}
+    ${pageHeading("CREDIT & LENDING", "Loans", "Review applications, manage disbursements and monitor outstanding balances.", `${importButton("loans")}<button class="button" data-action="export-loans">${icon("download")}Export</button>${primaryButton("New application", "new-loan")}`)}
     <div class="metric-strip"><div class="metric-item"><span>Outstanding portfolio</span><strong>${money(portfolio)}</strong></div><div class="metric-item"><span>Active loans</span><strong>${activeLoans().length}</strong></div><div class="metric-item"><span>Awaiting approval</span><strong>${pendingLoans().length}</strong></div></div>
     <section class="panel section-panel"><div class="toolbar"><span class="stat-label">${number(loans.length)} loan records</span><span class="toolbar-spacer"></span><select class="filter-select" id="loan-status-filter" aria-label="Filter loans by status"><option>All status</option>${["Active", "Pending", "Rejected", "Paid"].map((status) => `<option${loanStatusFilter === status ? " selected" : ""}>${status}</option>`).join("")}</select></div>
       <div class="table-wrap loan-table-wrap"><table><thead><tr><th>Loan / Member</th><th>Product</th><th>Principal</th><th>Balance</th><th>Rate</th><th title="Estimated installment on a reducing balance">Expected monthly payment</th><th>Due date</th><th>Status</th><th>Action</th></tr></thead><tbody>${loans.map((loan, i) => `<tr><td>${memberPersonCell(memberFor(loan.memberId) || { name: memberName(loan.memberId), id: loan.memberId }, i)}</td><td>${escapeHtml(loan.type)}</td><td>${money(loan.principal)}</td><td>${money(loan.balance)}</td><td>${loan.rate}%</td><td>${money(expectedMonthlyPayment(loan))}</td><td>${dateLabel(loan.dueDate)}</td><td><span class="status status-${loan.status.toLowerCase()}">${escapeHtml(loan.status)}</span></td><td>${loan.status === "Pending" ? `<div class="inline-actions"><button class="table-action approve" data-action="approve-loan" data-id="${escapeHtml(loan.id)}">Approve</button><button class="table-action" data-action="reject-loan" data-id="${escapeHtml(loan.id)}">Decline</button></div>` : `<button class="table-action" data-action="view-loan" data-id="${escapeHtml(loan.id)}">Details</button>`}</td></tr>`).join("") || `<tr><td colspan="9"><div class="empty-state"><strong>No loan records found</strong>Try another search or change the status filter.</div></td></tr>`}</tbody></table></div><div class="table-footer"><span>Showing ${loans.length} of ${data.loans.length} loans</span><span>Interest rates are reducing balance p.a.</span></div></section>`;
@@ -274,7 +280,7 @@ function renderRepayments() {
     .sort((a, b) => b.date.localeCompare(a.date));
   const total = repayments.reduce((sum, transaction) => sum + transaction.amount, 0);
   pageContent.innerHTML = `
-    ${pageHeading("LOAN COLLECTIONS", "Repayments", "Record payments and review your repayment collection history.", `<button class="button" data-action="export-repayments">${icon("download")}Export</button>${primaryButton("Record repayment", "new-repayment")}`)}
+    ${pageHeading("LOAN COLLECTIONS", "Repayments", "Record payments and review your repayment collection history.", `${importButton("repayments")}<button class="button" data-action="export-repayments">${icon("download")}Export</button>${primaryButton("Record repayment", "new-repayment")}`)}
     <div class="metric-strip"><div class="metric-item"><span>Repayments recorded</span><strong>${number(repayments.length)}</strong></div><div class="metric-item"><span>Collected to date</span><strong>${money(total)}</strong></div><div class="metric-item"><span>Loans with balance</span><strong>${activeLoans().length}</strong></div></div>
     <section class="panel section-panel"><div class="toolbar"><span class="stat-label">${number(repayments.length)} repayment records</span><span class="toolbar-spacer"></span></div><div class="table-wrap"><table><thead><tr><th>Member</th><th>Amount received</th><th>Payment method</th><th>Receipt / reference</th><th>Date</th><th>Status</th></tr></thead><tbody>${repayments.map((item, i) => `<tr><td>${memberPersonCell(memberFor(item.memberId) || { name: "Unknown member", id: item.memberId }, i)}</td><td class="amount-positive">+${money(item.amount)}</td><td>${escapeHtml(item.method)}</td><td>${escapeHtml(item.reference)}</td><td>${dateLabel(item.date)}</td><td><span class="status status-paid">Posted</span></td></tr>`).join("") || `<tr><td colspan="6"><div class="empty-state"><strong>No repayments found</strong>Record a repayment to get started.</div></td></tr>`}</tbody></table></div><div class="table-footer"><span>Showing ${repayments.length} repayment records</span><span>Repayments reduce the outstanding loan balance</span></div></section>`;
 }
@@ -283,7 +289,7 @@ function renderReports() {
   const monthlyDeposits = data.transactions.filter((transaction) => transaction.type === "Savings deposit").reduce((sum, item) => sum + item.amount, 0);
   const monthlyRepayments = data.transactions.filter((transaction) => transaction.type === "Loan repayment").reduce((sum, item) => sum + item.amount, 0);
   pageContent.innerHTML = `
-    ${pageHeading("SACCO PERFORMANCE", "Reports", "A snapshot of your SACCO’s financial health and member activity.", `<button class="button" data-action="export-transactions">${icon("download")}Export transactions</button>`)}
+    ${pageHeading("SACCO PERFORMANCE", "Reports", "A snapshot of your SACCO’s financial health and member activity.", `${importButton("transactions")}<button class="button" data-action="export-transactions">${icon("download")}Export transactions</button>`)}
     <div class="report-grid">
       <article class="panel report-card"><div class="report-card-header"><div><h2>Member savings</h2><p>Current member savings balances</p></div><span class="stat-icon">${icon("wallet")}</span></div><div class="report-number">${money(totalSavings())}</div><div class="report-foot"><span>${data.members.length} members</span></div></article>
       <article class="panel report-card"><div class="report-card-header"><div><h2>Loan portfolio</h2><p>Outstanding active loan balances</p></div><span class="stat-icon amber">${icon("landmark")}</span></div><div class="report-number">${money(loanPortfolio())}</div><div class="report-foot"><span>${activeLoans().length} active · ${pendingLoans().length} awaiting approval</span></div></article>
@@ -291,7 +297,7 @@ function renderReports() {
       <article class="panel report-card"><div class="report-card-header"><div><h2>Cash collections</h2><p>Recorded deposits and repayments</p></div><span class="stat-icon purple">${icon("receipt")}</span></div><div class="report-number">${money(monthlyDeposits + monthlyRepayments)}</div><div class="report-foot"><span>${number(data.transactions.length)} transactions recorded</span></div></article>
     </div>
     <section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Financial overview</h2><p class="panel-subtitle">Savings and loan portfolio · last 6 months</p></div></div><div class="chart-area">${renderChart()}</div></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Available exports</h2><p class="panel-subtitle">Download data for bookkeeping and reconciliation</p></div></div><div class="toolbar"><span class="stat-label">Member register</span><span class="toolbar-spacer"></span><button class="button button-small" data-action="export-members">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Loan register</span><span class="toolbar-spacer"></span><button class="button button-small" data-action="export-loans">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Transaction ledger</span><span class="toolbar-spacer"></span><button class="button button-small" data-action="export-transactions">${icon("download")}Download CSV</button></div></section>`;
+    <section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Available exports</h2><p class="panel-subtitle">Download data for bookkeeping and reconciliation</p></div></div><div class="toolbar"><span class="stat-label">Member register</span><span class="toolbar-spacer"></span>${importButton("members", true)}<button class="button button-small" data-action="export-members">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Loan register</span><span class="toolbar-spacer"></span>${importButton("loans", true)}<button class="button button-small" data-action="export-loans">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Transaction ledger</span><span class="toolbar-spacer"></span>${importButton("transactions", true)}<button class="button button-small" data-action="export-transactions">${icon("download")}Download CSV</button></div></section>`;
 }
 
 const renderers = {
@@ -422,7 +428,7 @@ function addTransaction(type) {
     else if (transactionType === "Savings withdrawal") member.savings -= amount;
     else member.shares += amount;
     const ref = values.reference.trim() || `AUTO-${Date.now().toString().slice(-7)}`;
-    data.transactions.unshift({ id: makeId(data.transactions, "TX"), memberId: member.id, type: transactionType, amount, date: values.date, method: values.method, reference: ref });
+    data.transactions.unshift({ id: makeId(data.transactions, "TX"), memberId: member.id, ...(isRepayment ? { loanId: values.loanId } : {}), type: transactionType, amount, date: values.date, method: values.method, reference: ref });
     showToast(`${transactionType} of ${money(amount)} recorded.`);
     return true;
   });
@@ -543,8 +549,247 @@ function exportCsv(filename, rows) {
   document.body.append(link);
   link.click();
   link.remove();
-  URL.revokeObjectURL(url);
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   showToast(`${filename} downloaded.`);
+}
+
+function importButton(kind, small = false) {
+  return `<button class="button${small ? " button-small" : ""}" type="button" data-action="import-${kind}">${icon("upload")}Import CSV</button>`;
+}
+
+function normalizeCsvHeader(header) {
+  return String(header).replace(/^\uFEFF/, "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (quoted) {
+      if (character === '"' && text[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else if (character === '"') quoted = false;
+      else cell += character;
+    } else if (character === '"' && !cell) quoted = true;
+    else if (character === ",") {
+      row.push(cell);
+      cell = "";
+    } else if (character === "\n" || character === "\r") {
+      if (character === "\r" && text[index + 1] === "\n") index += 1;
+      row.push(cell);
+      if (row.some((value) => value.trim())) rows.push(row);
+      row = [];
+      cell = "";
+    } else if (character === '"') throw new Error("The CSV contains a misplaced quotation mark.");
+    else cell += character;
+  }
+  if (quoted) throw new Error("The CSV has an unterminated quoted field.");
+  row.push(cell);
+  if (row.some((value) => value.trim())) rows.push(row);
+  if (rows.length < 2) throw new Error("The CSV must contain a header row and at least one data row.");
+
+  const headers = rows.shift().map(normalizeCsvHeader);
+  if (headers.some((header) => !header)) throw new Error("Every column in the CSV needs a header.");
+  if (new Set(headers).size !== headers.length) throw new Error("The CSV contains duplicate column headers.");
+
+  return rows.map((values, index) => {
+    if (values.length > headers.length && values.slice(headers.length).some((value) => value.trim())) {
+      throw new Error(`CSV row ${index + 2} has more values than the header.`);
+    }
+    return Object.fromEntries(headers.map((header, column) => [header, (values[column] || "").trim()]));
+  });
+}
+
+function csvValue(row, aliases) {
+  for (const alias of aliases) {
+    const value = row[normalizeCsvHeader(alias)];
+    if (value !== undefined) return value;
+  }
+  return "";
+}
+
+function requiredCsvValue(row, aliases, rowNumber, label) {
+  const value = csvValue(row, aliases);
+  if (!value) throw new Error(`CSV row ${rowNumber}: ${label} is required.`);
+  return value;
+}
+
+function csvNumber(row, aliases, rowNumber, label, { minimum = 0, integer = false } = {}) {
+  const value = requiredCsvValue(row, aliases, rowNumber, label).replace(/,/g, "");
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < minimum || (integer && !Number.isInteger(amount))) {
+    throw new Error(`CSV row ${rowNumber}: ${label} must be ${integer ? "a whole number" : "a number"} of at least ${minimum}.`);
+  }
+  return amount;
+}
+
+function csvDate(row, aliases, rowNumber, label) {
+  const value = requiredCsvValue(row, aliases, rowNumber, label);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const parsedDate = match ? new Date(`${value}T00:00:00.000Z`) : null;
+  if (!parsedDate || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== value) {
+    throw new Error(`CSV row ${rowNumber}: ${label} must use the YYYY-MM-DD date format.`);
+  }
+  return value;
+}
+
+function csvStatus(row, aliases, rowNumber, allowedStatuses) {
+  const value = requiredCsvValue(row, aliases, rowNumber, "Status").toLowerCase();
+  const status = allowedStatuses.find((allowed) => allowed.toLowerCase() === value);
+  if (!status) throw new Error(`CSV row ${rowNumber}: Status must be ${allowedStatuses.join(", ")}.`);
+  return status;
+}
+
+function importedMemberId(row, rowNumber, members) {
+  const memberId = csvValue(row, ["Member ID", "MemberId"]);
+  const memberNameValue = csvValue(row, ["Member", "Member Name"]);
+  let member = memberId ? members.find((item) => item.id === memberId) : null;
+  if (memberId && !member) throw new Error(`CSV row ${rowNumber}: member ID "${memberId}" does not exist. Import the member register first.`);
+  if (member && memberNameValue && member.name.toLowerCase() !== memberNameValue.toLowerCase()) {
+    throw new Error(`CSV row ${rowNumber}: member name does not match member ID "${memberId}".`);
+  }
+  if (!member && memberNameValue) {
+    const matches = members.filter((item) => item.name.toLowerCase() === memberNameValue.toLowerCase());
+    if (matches.length > 1) throw new Error(`CSV row ${rowNumber}: "${memberNameValue}" matches multiple members. Include a Member ID column.`);
+    member = matches[0];
+  }
+  if (!member) throw new Error(`CSV row ${rowNumber}: a valid Member ID or Member name is required. Import the member register first.`);
+  return member.id;
+}
+
+function importMembers(rows) {
+  return rows.map((row, index) => {
+    const rowNumber = index + 2;
+    return {
+      id: requiredCsvValue(row, ["Member ID", "ID"], rowNumber, "Member ID"),
+      name: requiredCsvValue(row, ["Name", "Full Name"], rowNumber, "Name"),
+      phone: csvValue(row, ["Phone", "Phone Number"]),
+      email: csvValue(row, ["Email", "Email Address"]),
+      joinDate: csvDate(row, ["Join Date", "Joined"], rowNumber, "Join date"),
+      status: csvStatus(row, ["Status"], rowNumber, ["Active", "Inactive"]),
+      savings: csvNumber(row, ["Savings (UGX)", "Savings"], rowNumber, "Savings"),
+      shares: csvNumber(row, ["Shares (UGX)", "Shares"], rowNumber, "Shares"),
+    };
+  });
+}
+
+function importLoans(rows, members) {
+  return rows.map((row, index) => {
+    const rowNumber = index + 2;
+    const principal = csvNumber(row, ["Principal (UGX)", "Principal"], rowNumber, "Principal", { minimum: 0.01 });
+    const balance = csvNumber(row, ["Balance (UGX)", "Balance"], rowNumber, "Balance");
+    if (balance > principal) throw new Error(`CSV row ${rowNumber}: Balance cannot exceed the principal.`);
+    return {
+      id: requiredCsvValue(row, ["Loan ID", "ID"], rowNumber, "Loan ID"),
+      memberId: importedMemberId(row, rowNumber, members),
+      type: requiredCsvValue(row, ["Product", "Type", "Loan Type"], rowNumber, "Product"),
+      principal,
+      balance,
+      rate: csvNumber(row, ["Rate (%)", "Rate", "Interest Rate"], rowNumber, "Rate"),
+      term: csvNumber(row, ["Term (months)", "Term"], rowNumber, "Term", { minimum: 1, integer: true }),
+      date: csvDate(row, ["Application Date", "Date"], rowNumber, "Application date"),
+      dueDate: csvDate(row, ["Due Date", "Maturity Date"], rowNumber, "Due date"),
+      status: csvStatus(row, ["Status"], rowNumber, ["Active", "Pending", "Rejected", "Paid"]),
+    };
+  });
+}
+
+function importTransactions(rows, members, loans, kind) {
+  const transactionTypes = {
+    savings: ["Savings deposit", "Savings withdrawal"],
+    shares: ["Share contribution"],
+    repayments: ["Loan repayment"],
+    transactions: ["Savings deposit", "Savings withdrawal", "Share contribution", "Loan repayment"],
+  }[kind];
+  return rows.map((row, index) => {
+    const rowNumber = index + 2;
+    const rawType = csvValue(row, ["Type", "Transaction Type"]);
+    const type = rawType
+      ? transactionTypes.find((allowed) => allowed.toLowerCase() === rawType.toLowerCase())
+      : transactionTypes.length === 1 ? transactionTypes[0] : null;
+    if (!type) {
+      throw new Error(`CSV row ${rowNumber}: transaction type must be ${transactionTypes.join(", ")}.`);
+    }
+    const memberId = importedMemberId(row, rowNumber, members);
+    const loanId = csvValue(row, ["Loan ID", "LoanId"]);
+    if (loanId && type !== "Loan repayment") {
+      throw new Error(`CSV row ${rowNumber}: only loan repayments can include a Loan ID.`);
+    }
+    if (loanId && !loans.some((loan) => loan.id === loanId && loan.memberId === memberId)) {
+      throw new Error(`CSV row ${rowNumber}: Loan ID "${loanId}" does not belong to this member. Import the loan register first.`);
+    }
+    return {
+      id: requiredCsvValue(row, ["Transaction ID", "ID"], rowNumber, "Transaction ID"),
+      memberId,
+      ...(loanId ? { loanId } : {}),
+      type,
+      amount: csvNumber(row, ["Amount (UGX)", "Amount", "Amount Received"], rowNumber, "Amount", { minimum: 0.01 }),
+      date: csvDate(row, ["Date", "Transaction Date"], rowNumber, "Date"),
+      method: requiredCsvValue(row, ["Payment Method", "Method"], rowNumber, "Payment method"),
+      reference: csvValue(row, ["Reference", "Receipt", "Receipt Reference"]),
+    };
+  });
+}
+
+function mergeImportedRecords(existing, imported, label) {
+  const ids = new Set();
+  let added = 0;
+  let updated = 0;
+  const records = [...existing];
+  imported.forEach((record, index) => {
+    if (ids.has(record.id)) throw new Error(`CSV row ${index + 2}: duplicate ${label} ID "${record.id}".`);
+    ids.add(record.id);
+    const existingIndex = records.findIndex((item) => item.id === record.id);
+    if (existingIndex === -1) {
+      records.push(record);
+      added += 1;
+    } else {
+      records[existingIndex] = record;
+      updated += 1;
+    }
+  });
+  return { records, added, updated };
+}
+
+function importData(kind, text, filename) {
+  try {
+    const rows = parseCsv(text);
+    const imported = kind === "members" ? importMembers(rows)
+      : kind === "loans" ? importLoans(rows, data.members)
+        : importTransactions(rows, data.members, data.loans, kind);
+    const nextData = structuredClone(data);
+    const collection = kind === "members" ? "members" : kind === "loans" ? "loans" : "transactions";
+    const result = mergeImportedRecords(nextData[collection], imported, collection.slice(0, -1));
+    nextData[collection] = result.records;
+
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+    } catch (error) {
+      console.error("Unable to save imported SACCO data.", error);
+      showToast("Import could not be saved. Check available device storage and try again.");
+      return;
+    }
+
+    data = nextData;
+    searchTerm = "";
+    document.querySelector("#global-search").value = "";
+    if (kind === "members") {
+      activeView = "members";
+      memberStatusFilter = "All status";
+    } else if (kind === "loans") {
+      activeView = "loans";
+      loanStatusFilter = "All status";
+    } else if (kind !== "transactions") activeView = kind;
+    render();
+    showToast(`${filename}: ${result.added} added, ${result.updated} updated. Existing records not in the file were kept.`);
+  } catch (error) {
+    console.error(`Unable to import ${filename}.`, error);
+    showToast(`Import failed: ${error.message}`);
+  }
 }
 
 function exportData(kind) {
@@ -552,10 +797,10 @@ function exportData(kind) {
   if (kind === "members") {
     exportCsv(`umoja-members-${date}.csv`, [["Member ID", "Name", "Phone", "Email", "Join date", "Status", "Savings (UGX)", "Shares (UGX)"], ...data.members.map((m) => [m.id, m.name, m.phone, m.email, m.joinDate, m.status, m.savings, m.shares])]);
   } else if (kind === "loans") {
-    exportCsv(`umoja-loans-${date}.csv`, [["Loan ID", "Member", "Product", "Principal (UGX)", "Balance (UGX)", "Rate (%)", "Term (months)", "Application date", "Due date", "Status"], ...data.loans.map((l) => [l.id, memberName(l.memberId), l.type, l.principal, l.balance, l.rate, l.term, l.date, l.dueDate, l.status])]);
+    exportCsv(`umoja-loans-${date}.csv`, [["Loan ID", "Member ID", "Member", "Product", "Principal (UGX)", "Balance (UGX)", "Rate (%)", "Term (months)", "Application date", "Due date", "Status"], ...data.loans.map((l) => [l.id, l.memberId, memberName(l.memberId), l.type, l.principal, l.balance, l.rate, l.term, l.date, l.dueDate, l.status])]);
   } else {
     const transactions = kind === "savings" ? data.transactions.filter((t) => t.type.startsWith("Savings")) : kind === "shares" ? data.transactions.filter((t) => t.type === "Share contribution") : kind === "repayments" ? data.transactions.filter((t) => t.type === "Loan repayment") : data.transactions;
-    exportCsv(`umoja-${kind === "transactions" ? "transactions" : kind}-${date}.csv`, [["Transaction ID", "Member", "Type", "Amount (UGX)", "Date", "Payment method", "Reference"], ...transactions.map((t) => [t.id, memberName(t.memberId), t.type, t.amount, t.date, t.method, t.reference])]);
+    exportCsv(`umoja-${kind === "transactions" ? "transactions" : kind}-${date}.csv`, [["Transaction ID", "Member ID", "Member", "Type", "Amount (UGX)", "Date", "Payment method", "Reference", "Loan ID"], ...transactions.map((t) => [t.id, t.memberId, memberName(t.memberId), t.type, t.amount, t.date, t.method, t.reference, t.loanId || ""])]);
   }
 }
 
@@ -591,6 +836,12 @@ document.addEventListener("click", (event) => {
     return;
   }
   const { action, id } = target.dataset;
+  if (action.startsWith("import-")) {
+    importKind = action.slice(7);
+    importFileInput.value = "";
+    importFileInput.click();
+    return;
+  }
   if (action === "add-member") addMember();
   else if (action === "new-transaction") addTransaction("Savings deposit");
   else if (action === "new-share") addTransaction("Share contribution");
@@ -618,6 +869,25 @@ document.addEventListener("click", (event) => {
     if (loan) showToast(`${loan.id}: ${money(loan.balance)} outstanding at ${loan.rate}% p.a.`);
   } else if (action.startsWith("export-")) exportData(action.slice(7));
   else if (action === "help") showToast("Use the navigation to manage members, savings, shares, loans and repayments.");
+});
+
+importFileInput.addEventListener("change", async (event) => {
+  const input = event.currentTarget;
+  const file = input.files[0];
+  const kind = importKind;
+  importKind = "";
+  input.value = "";
+  if (!file) return;
+  if (!file.name.toLowerCase().endsWith(".csv")) {
+    showToast("Choose a CSV file exported from this SACCO workspace.");
+    return;
+  }
+  try {
+    importData(kind, await file.text(), file.name);
+  } catch (error) {
+    console.error(`Unable to read ${file.name}.`, error);
+    showToast(`Could not read ${file.name}. Please try another CSV file.`);
+  }
 });
 
 document.querySelector("#global-search").addEventListener("input", (event) => {
@@ -659,7 +929,7 @@ document.querySelector("#notification-button").addEventListener("click", () => {
   const count = pendingLoans().length;
   showToast(count ? `You have ${count} loan application${count === 1 ? "" : "s"} awaiting review.` : "You’re all caught up. No pending loan applications.");
 });
-document.querySelector("#profile-button").addEventListener("click", () => showToast("Signed in as Josh · Administrator"));
+document.querySelector("#profile-button").addEventListener("click", () => showToast(`Signed in as ${administratorName} · Administrator`));
 document.addEventListener("keydown", (event) => {
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
     event.preventDefault();

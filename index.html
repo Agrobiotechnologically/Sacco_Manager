@@ -26,6 +26,7 @@
       <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m18 6-12 12M6 6l12 12"/></symbol>
       <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5-5 5 5M12 5v12"/></symbol>
       <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 7h16M7 12h10m-7 5h4"/></symbol>
       <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
       <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
@@ -53,8 +54,8 @@
           <div class="help-card"><span class="help-orb">✳</span><strong>Need a hand?</strong><p>Your SACCO workspace, all in one place.</p><button type="button" id="help-button">Explore quick guide <span>→</span></button></div>
           <div class="sidebar-tools"><a class="sidebar-download" href="https://github.com/Agrobiotechnologically/Sacco_Manager/releases/latest/download/umoja-sacco.apk"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>Download Android APK</a><button id="theme-toggle" type="button" data-action="toggle-theme">Switch to dark theme</button><button type="button" data-action="reset-data">Reset all data</button></div>
           <button class="profile-button" id="profile-button">
-            <span class="avatar avatar-green">J</span>
-            <span class="profile-copy"><strong>Josh</strong><small>Administrator</small></span>
+            <span class="avatar avatar-green" id="administrator-avatar">J</span>
+            <span class="profile-copy"><strong id="administrator-name">Josh</strong><small>Administrator</small></span>
             <svg class="icon profile-more"><use href="#i-more"/></svg>
           </button>
         </div>
@@ -75,6 +76,7 @@
         <footer class="site-credit">Powered by <a href="https://agrobiotechnologically.github.io/CYBERSPACE1O1/" target="_blank" rel="noopener noreferrer">CYBERSPACE1O1</a></footer>
       </main>
     </div>
+    <input id="data-import-file" type="file" accept=".csv,text/csv" hidden aria-label="Choose a SACCO data CSV file" />
     <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
     <dialog class="app-dialog" id="app-dialog" aria-labelledby="dialog-title"></dialog>
   </body>
