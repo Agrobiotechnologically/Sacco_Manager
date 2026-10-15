@@ -1,0 +1,17 @@
+{
+  "name": "umoja-sacco-management",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-web.mjs",
+    "android:sync": "npm run build && cap sync android",
+    "android:apk": "node scripts/build-android-apk.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.3"
+  }
+}

@@ -55,6 +55,9 @@ button { cursor: pointer; }
 .help-card button { padding: 0; border: 0; color: #a7dfb8; background: none; font-size: 10px; font-weight: 600; }
 .help-card button span { margin-left: 5px; }
 .sidebar-tools { display: grid; gap: 3px; margin: 0 2px 12px; }
+.sidebar-download { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 5px; color: #a9c0b4; text-decoration: none; font-size: 9px; }
+.sidebar-download .icon { width: 13px; height: 13px; }
+.sidebar-download:hover { color: #fff; background: #153a30; }
 .sidebar-tools button { padding: 7px 10px; border: 0; border-radius: 5px; color: #a9c0b4; background: transparent; text-align: left; font-size: 9px; }
 .sidebar-tools button:hover { color: #fff; background: #153a30; }
 .profile-button { display: flex; align-items: center; width: 100%; gap: 10px; padding: 11px 5px 2px; border: 0; border-top: 1px solid rgba(255,255,255,.1); color: #e3ede8; background: none; text-align: left; }

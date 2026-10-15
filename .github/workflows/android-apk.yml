@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - app.js
+      - index.html
+      - styles.css
+      - package.json
+      - package-lock.json
+      - capacitor.config.json
+      - scripts/**
+      - .github/workflows/android-apk.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out project
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install project dependencies
+        run: npm ci
+
+      - name: Create Android project
+        run: npx cap add android
+
+      - name: Build installable APK
+        run: npm run android:apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: umoja-sacco-apk
+          path: downloads/umoja-sacco.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish APK release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-apk-${{ github.run_id }}-${{ github.run_attempt }}
+          name: Umoja SACCO Android APK (build ${{ github.run_number }})
+          body: Install `umoja-sacco.apk` on your Android device. App records are stored locally on that device.
+          files: downloads/umoja-sacco.apk
+          make_latest: true
