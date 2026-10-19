@@ -28,3 +28,7 @@ npm run android:apk
 If the project does not yet contain an `android/` directory, run `npx cap add android` once before building.
 
 The installable debug APK is written to `downloads/umoja-sacco.apk`. It stores SACCO records and preferences on the device using Android WebView's local storage; uninstalling or clearing the app's storage removes them.
+
+## Moving data between devices
+
+On Android, CSV exports and full backups open the system save-location picker. Use **Reports → Full device backup → Export backup** to move members, loans, and transactions together. On the destination device, choose **Import backup** and select the `.json` backup; matching IDs are updated and unrelated existing records are kept. Individual CSV imports remain available for bookkeeping workflows, but member records must be imported before loans or transactions that refer to them.

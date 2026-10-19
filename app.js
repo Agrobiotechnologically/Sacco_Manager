@@ -297,7 +297,7 @@ function renderReports() {
       <article class="panel report-card"><div class="report-card-header"><div><h2>Cash collections</h2><p>Recorded deposits and repayments</p></div><span class="stat-icon purple">${icon("receipt")}</span></div><div class="report-number">${money(monthlyDeposits + monthlyRepayments)}</div><div class="report-foot"><span>${number(data.transactions.length)} transactions recorded</span></div></article>
     </div>
     <section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Financial overview</h2><p class="panel-subtitle">Savings and loan portfolio · last 6 months</p></div></div><div class="chart-area">${renderChart()}</div></section>
-    <section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Available exports</h2><p class="panel-subtitle">Download data for bookkeeping and reconciliation</p></div></div><div class="toolbar"><span class="stat-label">Member register</span><span class="toolbar-spacer"></span>${importButton("members", true)}<button class="button button-small" data-action="export-members">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Loan register</span><span class="toolbar-spacer"></span>${importButton("loans", true)}<button class="button button-small" data-action="export-loans">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Transaction ledger</span><span class="toolbar-spacer"></span>${importButton("transactions", true)}<button class="button button-small" data-action="export-transactions">${icon("download")}Download CSV</button></div></section>`;
+    <section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Full device backup</h2><p class="panel-subtitle">Move members, loans and transactions together to another phone or computer. Importing merges matching records and keeps records not in the backup.</p></div></div><div class="toolbar"><span class="stat-label">Complete SACCO backup</span><span class="toolbar-spacer"></span>${importButton("backup", true)}<button class="button button-small" data-action="export-backup">${icon("download")}Export backup</button></div></section><section class="panel" style="margin-top:15px"><div class="panel-header"><div><h2 class="panel-title">Available CSV exports</h2><p class="panel-subtitle">For bookkeeping and reconciliation. When moving data, import the member register before loans and transactions.</p></div></div><div class="toolbar"><span class="stat-label">Member register</span><span class="toolbar-spacer"></span>${importButton("members", true)}<button class="button button-small" data-action="export-members">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Loan register</span><span class="toolbar-spacer"></span>${importButton("loans", true)}<button class="button button-small" data-action="export-loans">${icon("download")}Download CSV</button></div><div class="toolbar"><span class="stat-label">Transaction ledger</span><span class="toolbar-spacer"></span>${importButton("transactions", true)}<button class="button button-small" data-action="export-transactions">${icon("download")}Download CSV</button></div></section>`;
 }
 
 const renderers = {
@@ -542,19 +542,47 @@ function resetData() {
 function exportCsv(filename, rows) {
   if (!rows.length) { showToast("There is no data to export."); return; }
   const csv = rows.map((row) => row.map((value) => `"${String(value ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-  showToast(`${filename} downloaded.`);
+  saveExportFile(filename, `\uFEFF${csv}`, "text/csv;charset=utf-8");
+}
+
+async function saveExportFile(filename, content, contentType) {
+  try {
+    const nativeTransfer = window.Capacitor?.Plugins?.DataTransfer;
+    if (nativeTransfer?.saveFile) {
+      const result = await nativeTransfer.saveFile({ filename, content, contentType });
+      showToast(result.cancelled ? "Export canceled." : `${filename} saved.`);
+      return;
+    }
+
+    const file = new File([content], filename, { type: contentType });
+    if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+      await navigator.share({ files: [file], title: filename });
+      showToast(`${filename} shared.`);
+      return;
+    }
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast(`${filename} downloaded.`);
+  } catch (error) {
+    if (error.name === "AbortError") {
+      showToast("Export canceled.");
+      return;
+    }
+    console.error(`Unable to export ${filename}.`, error);
+    showToast(`Could not export ${filename}. Please check device storage and try again.`);
+  }
 }
 
 function importButton(kind, small = false) {
-  return `<button class="button${small ? " button-small" : ""}" type="button" data-action="import-${kind}">${icon("upload")}Import CSV</button>`;
+  const label = kind === "backup" ? "Import backup" : "Import CSV";
+  return `<button class="button${small ? " button-small" : ""}" type="button" data-action="import-${kind}">${icon("upload")}${label}</button>`;
 }
 
 function normalizeCsvHeader(header) {
@@ -648,7 +676,6 @@ function importedMemberId(row, rowNumber, members) {
   const memberId = csvValue(row, ["Member ID", "MemberId"]);
   const memberNameValue = csvValue(row, ["Member", "Member Name"]);
   let member = memberId ? members.find((item) => item.id === memberId) : null;
-  if (memberId && !member) throw new Error(`CSV row ${rowNumber}: member ID "${memberId}" does not exist. Import the member register first.`);
   if (member && memberNameValue && member.name.toLowerCase() !== memberNameValue.toLowerCase()) {
     throw new Error(`CSV row ${rowNumber}: member name does not match member ID "${memberId}".`);
   }
@@ -657,6 +684,7 @@ function importedMemberId(row, rowNumber, members) {
     if (matches.length > 1) throw new Error(`CSV row ${rowNumber}: "${memberNameValue}" matches multiple members. Include a Member ID column.`);
     member = matches[0];
   }
+  if (!member && memberId) throw new Error(`CSV row ${rowNumber}: member ID "${memberId}" does not exist. Import the member register first.`);
   if (!member) throw new Error(`CSV row ${rowNumber}: a valid Member ID or Member name is required. Import the member register first.`);
   return member.id;
 }
@@ -755,8 +783,76 @@ function mergeImportedRecords(existing, imported, label) {
   return { records, added, updated };
 }
 
+function importBackup(text, filename) {
+  const backup = JSON.parse(text);
+  const backupData = backup?.data;
+  if (backup?.schemaVersion !== 1 || !backupData || !Array.isArray(backupData.members)
+    || !Array.isArray(backupData.loans) || !Array.isArray(backupData.transactions)) {
+    throw new Error("This is not a supported Umoja SACCO backup file.");
+  }
+
+  const validString = (value) => typeof value === "string";
+  const validNumber = (value) => typeof value === "number" && Number.isFinite(value);
+  const validRecords = {
+    members: (record) => validString(record.id) && validString(record.name)
+      && validString(record.phone) && validString(record.email) && validString(record.joinDate)
+      && validString(record.status) && validNumber(record.savings) && validNumber(record.shares),
+    loans: (record) => validString(record.id) && validString(record.memberId) && validString(record.type)
+      && validNumber(record.principal) && validNumber(record.balance) && validNumber(record.rate)
+      && validNumber(record.term) && validString(record.date) && validString(record.dueDate)
+      && validString(record.status),
+    transactions: (record) => validString(record.id) && validString(record.memberId)
+      && validString(record.type) && validNumber(record.amount) && validString(record.date)
+      && validString(record.method) && validString(record.reference)
+      && (record.loanId === undefined || validString(record.loanId)),
+  };
+  for (const collection of ["members", "loans", "transactions"]) {
+    if (backupData[collection].some((record) => !record || typeof record !== "object" || Array.isArray(record)
+      || !validRecords[collection](record))) {
+      throw new Error(`The backup contains an invalid ${collection} record.`);
+    }
+  }
+  if (backupData.monthly !== undefined && (!Array.isArray(backupData.monthly)
+    || backupData.monthly.some((record) => !record || !validString(record.month)
+      || !validNumber(record.savings) || !validNumber(record.loans)))) {
+    throw new Error("The backup contains invalid monthly summary data.");
+  }
+
+  const nextData = structuredClone(data);
+  for (const collection of ["members", "loans", "transactions"]) {
+    nextData[collection] = mergeImportedRecords(nextData[collection], backupData[collection], collection.slice(0, -1)).records;
+  }
+  if (backupData.monthly) nextData.monthly = backupData.monthly;
+
+  const memberIds = new Set(nextData.members.map((member) => member.id));
+  const loanIds = new Map(nextData.loans.map((loan) => [loan.id, loan]));
+  if (nextData.loans.some((loan) => !memberIds.has(loan.memberId))
+    || nextData.transactions.some((transaction) => !memberIds.has(transaction.memberId)
+      || (transaction.loanId && loanIds.get(transaction.loanId)?.memberId !== transaction.memberId))) {
+    throw new Error("The backup contains loans or transactions linked to missing records.");
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextData));
+  } catch (error) {
+    console.error("Unable to save imported SACCO backup.", error);
+    showToast("Import could not be saved. Check available device storage and try again.");
+    return;
+  }
+  data = nextData;
+  searchTerm = "";
+  document.querySelector("#global-search").value = "";
+  activeView = "dashboard";
+  render();
+  showToast(`${filename}: backup imported. Matching records were updated; other records were kept.`);
+}
+
 function importData(kind, text, filename) {
   try {
+    if (filename.toLowerCase().endsWith(".json")) {
+      importBackup(text, filename);
+      return;
+    }
     const rows = parseCsv(text);
     const imported = kind === "members" ? importMembers(rows)
       : kind === "loans" ? importLoans(rows, data.members)
@@ -794,7 +890,13 @@ function importData(kind, text, filename) {
 
 function exportData(kind) {
   const date = isoDate();
-  if (kind === "members") {
+  if (kind === "backup") {
+    saveExportFile(`umoja-backup-${date}.json`, JSON.stringify({
+      schemaVersion: 1,
+      exportedAt: new Date().toISOString(),
+      data,
+    }, null, 2), "application/json;charset=utf-8");
+  } else if (kind === "members") {
     exportCsv(`umoja-members-${date}.csv`, [["Member ID", "Name", "Phone", "Email", "Join date", "Status", "Savings (UGX)", "Shares (UGX)"], ...data.members.map((m) => [m.id, m.name, m.phone, m.email, m.joinDate, m.status, m.savings, m.shares])]);
   } else if (kind === "loans") {
     exportCsv(`umoja-loans-${date}.csv`, [["Loan ID", "Member ID", "Member", "Product", "Principal (UGX)", "Balance (UGX)", "Rate (%)", "Term (months)", "Application date", "Due date", "Status"], ...data.loans.map((l) => [l.id, l.memberId, memberName(l.memberId), l.type, l.principal, l.balance, l.rate, l.term, l.date, l.dueDate, l.status])]);
@@ -878,8 +980,8 @@ importFileInput.addEventListener("change", async (event) => {
   importKind = "";
   input.value = "";
   if (!file) return;
-  if (!file.name.toLowerCase().endsWith(".csv")) {
-    showToast("Choose a CSV file exported from this SACCO workspace.");
+  if (!file.name.toLowerCase().endsWith(".csv") && !file.name.toLowerCase().endsWith(".json")) {
+    showToast("Choose a CSV export or JSON backup from this SACCO workspace.");
     return;
   }
   try {
